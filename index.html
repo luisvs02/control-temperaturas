@@ -13,6 +13,8 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
 <style>
   :root{
@@ -363,7 +365,7 @@
   <div class="modal" style="text-align:center;">
     <button class="modal-close" onclick="cerrarModal('modalQR')">✕</button>
     <h3 id="qrTitulo">Código QR</h3>
-    <p class="reg-detail" style="margin-bottom:14px;">Al escanearlo se abre el historial del mes actual de este equipo.</p>
+    <p class="reg-detail" style="margin-bottom:14px;">Al escanearlo se abre directo el PDF con el registro del mes actual de este equipo.</p>
     <div id="qrContenedor" style="display:flex;justify-content:center;padding:10px;background:#fff;border-radius:12px;"></div>
     <button class="btn btn-outline" onclick="descargarQR()">Descargar imagen</button>
     <button class="btn btn-primary" onclick="imprimirQR()">Imprimir</button>
@@ -861,7 +863,7 @@ function mostrarQR(id){
 
   const cont = document.getElementById("qrContenedor");
   cont.innerHTML = "";
-  const url = `${urlBaseApp()}?equipo=${encodeURIComponent(id)}&vista=historial`;
+  const url = `${urlBaseApp()}?equipo=${encodeURIComponent(id)}&vista=pdf`;
   new QRCode(cont, {
     text: url,
     width: 200,
@@ -922,7 +924,7 @@ function imprimirTodosQR(){
   equipos.forEach(eq=>{
     const div = document.createElement("div");
     tempCont.appendChild(div);
-    const url = `${urlBaseApp()}?equipo=${encodeURIComponent(eq.id)}&vista=historial`;
+    const url = `${urlBaseApp()}?equipo=${encodeURIComponent(eq.id)}&vista=pdf`;
     new QRCode(div, {
       text: url, width: 180, height: 180,
       colorDark: "#0F3B41", colorLight: "#ffffff"
@@ -967,6 +969,64 @@ function imprimirTodosQR(){
   setTimeout(()=>{ w.print(); }, 400);
 }
 
+/* ==================== PDF DIRECTO AL ESCANEAR QR ==================== */
+function generarPDFYAbrir(equipoId){
+  const eq = equipos.find(e=>e.id===equipoId);
+  if(!eq){ showToast("Equipo no encontrado"); return; }
+
+  const hoy = new Date();
+  const mes = hoy.getMonth()+1;
+  const anio = hoy.getFullYear();
+  const desde = `${anio}-${String(mes).padStart(2,"0")}-01`;
+  const ultimoDia = new Date(anio, mes, 0).getDate();
+  const hasta = `${anio}-${String(mes).padStart(2,"0")}-${String(ultimoDia).padStart(2,"0")}`;
+
+  db.collection("registros")
+    .where("equipoId","==",equipoId)
+    .where("fecha",">=",desde)
+    .where("fecha","<=",hasta)
+    .get().then(snap=>{
+      const registros = [];
+      snap.forEach(doc=> registros.push(doc.data()));
+      registros.sort((a,b)=> a.fecha.localeCompare(b.fecha) || (a.horaInicio||"").localeCompare(b.horaInicio||""));
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFontSize(15);
+      doc.setTextColor(15,59,65);
+      doc.text(eq.nombre, 14, 18);
+      doc.setFontSize(10);
+      doc.setTextColor(90,90,90);
+      doc.text(`Periodo: ${MESES[mes-1]} ${anio}`, 14, 25);
+
+      const filas = registros.length ? registros.map(r=>[
+        fechaLegible(r.fecha),
+        r.horaInicio || "-",
+        r.tempInicio != null ? r.tempInicio+"°C" : "-",
+        r.horaCierre || "-",
+        r.tempCierre != null ? r.tempCierre+"°C" : "-",
+        r.responsableInicio || "-"
+      ]) : [["Sin registros este mes","","","","",""]];
+
+      doc.autoTable({
+        startY: 32,
+        head: [["Fecha","Hora inicial","Temp. inicial","Hora cierre","Temp. cierre","Responsable"]],
+        body: filas,
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [15,59,65], textColor: 255 },
+        alternateRowStyles: { fillColor: [241,246,247] }
+      });
+
+      const nombreArchivo = `Temperaturas_${eq.nombre.replace(/\s+/g,"_")}_${MESES[mes-1]}_${anio}.pdf`;
+      const blobUrl = doc.output("bloburl", { filename: nombreArchivo });
+      window.location.href = blobUrl;
+    }).catch(e=>{
+      console.error(e);
+      showToast("Error al generar el PDF");
+    });
+}
+
 /* ==================== ABRIR DESDE QR (parámetros de URL) ==================== */
 let paramEquipoPendiente = null;
 let paramVistaPendiente = null;
@@ -985,7 +1045,9 @@ function aplicarParametroSiCorresponde(){
   if(!existe) return; // todavía no llegaron los equipos, se reintenta en el próximo snapshot
 
   yaAplicoParam = true;
-  if(paramVistaPendiente === "historial"){
+  if(paramVistaPendiente === "pdf"){
+    generarPDFYAbrir(paramEquipoPendiente);
+  }else if(paramVistaPendiente === "historial"){
     document.getElementById("selEquipoHist").value = paramEquipoPendiente;
     cambiarTab("historial");
     cargarHistorial();
