@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Control de Temperaturas</title>
+<meta name="theme-color" content="#0F3B41">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --dark: #0F3B41;
+    --dark-2: #144B52;
+    --ice: #3FA9C8;
+    --ice-light: #8FE3F5;
+    --bg: #F1F6F7;
+    --card: #FFFFFF;
+    --text: #16262A;
+    --text-soft: #5B7278;
+    --border: #DCE8EA;
+    --danger: #C0433A;
+    --ok: #2F8F5B;
+    --warn-bg: #FFF6E9;
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:84px;
+  }
+
+  header.topbar{
+    background:linear-gradient(135deg,var(--dark) 0%, var(--dark-2) 100%);
+    color:#fff;
+    padding:22px 18px 20px;
+    position:sticky; top:0; z-index:20;
+    box-shadow:0 2px 10px rgba(15,59,65,0.25);
+  }
+  header.topbar .brand{
+    display:flex; align-items:center; gap:10px;
+  }
+  header.topbar .brand-icon{
+    width:34px;height:34px;border-radius:9px;
+    background:rgba(255,255,255,0.12);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;
+  }
+  header.topbar h1{
+    margin:0; font-size:17px; font-weight:700; letter-spacing:0.2px;
+  }
+  header.topbar .sub{
+    margin:2px 0 0; font-size:12.5px; color:var(--ice-light); font-weight:500;
+  }
+
+  main{ max-width:640px; margin:0 auto; padding:16px; }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+    margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(15,59,65,0.05);
+  }
+  .card h2{
+    margin:0 0 12px; font-size:14px; text-transform:uppercase;
+    letter-spacing:0.6px; color:var(--dark); font-weight:700;
+  }
+
+  label{
+    display:block; font-size:12.5px; font-weight:600; color:var(--text-soft);
+    margin:10px 0 5px;
+  }
+  label:first-child{margin-top:0;}
+  select, input[type=text], input[type=number], input[type=date], input[type=time]{
+    width:100%; padding:12px 12px; border:1.5px solid var(--border); border-radius:10px;
+    font-size:15px; background:#fff; color:var(--text); font-family:inherit;
+  }
+  select:focus, input:focus{ outline:none; border-color:var(--ice); }
+
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    border:none; border-radius:10px; padding:13px 16px; font-size:14.5px; font-weight:700;
+    cursor:pointer; width:100%; margin-top:14px; font-family:inherit;
+  }
+  .btn-primary{ background:var(--ice); color:#fff; }
+  .btn-primary:active{ background:var(--dark-2); }
+  .btn-outline{ background:#fff; color:var(--dark); border:1.5px solid var(--border); }
+  .btn-danger{ background:#fff; color:var(--danger); border:1.5px solid #F1C6C2; }
+  .btn-ghost{ background:transparent; color:var(--ice); width:auto; margin:0; padding:8px 10px; }
+  .btn-sm{ width:auto; padding:8px 12px; font-size:13px; margin-top:0; }
+
+  .reg-item{
+    border:1.5px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px;
+    background:#fbfdfd;
+  }
+  .reg-item.abierto{ border-color:#FCD9A6; background:var(--warn-bg); }
+  .reg-item .top-row{
+    display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;
+  }
+  .reg-item .eq-name{ font-weight:700; font-size:14.5px; color:var(--dark); }
+  .badge{
+    font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px;
+  }
+  .badge.abierto{ background:#FCD9A6; color:#8A5A00; }
+  .badge.cerrado{ background:#D9F0E1; color:var(--ok); }
+  .reg-detail{ font-size:13px; color:var(--text-soft); line-height:1.6; }
+  .reg-actions{ display:flex; gap:8px; margin-top:10px; }
+
+  .tabbar{
+    position:fixed; bottom:0; left:0; right:0; background:#fff;
+    border-top:1px solid var(--border); display:flex; z-index:30;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tabbar button{
+    flex:1; background:none; border:none; padding:11px 4px 9px; font-size:11.5px;
+    font-weight:700; color:var(--text-soft); font-family:inherit; cursor:pointer;
+  }
+  .tabbar button .ic{ display:block; font-size:19px; margin-bottom:2px; }
+  .tabbar button.active{ color:var(--ice); }
+
+  .tabpanel{ display:none; }
+  .tabpanel.active{ display:block; }
+
+  .empty{ text-align:center; padding:30px 10px; color:var(--text-soft); font-size:14px; }
+
+  .equipo-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:11px 0; border-bottom:1px solid var(--border);
+  }
+  .equipo-row:last-child{ border-bottom:none; }
+  .equipo-row .name{ font-weight:600; font-size:14.5px; }
+  .equipo-row .actions{ display:flex; gap:6px; }
+  .icon-btn{
+    border:1px solid var(--border); background:#fff; border-radius:8px;
+    width:32px; height:32px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; font-size:14px;
+  }
+
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(15,59,65,0.45); z-index:50;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .modal{
+    background:#fff; border-radius:18px 18px 0 0; width:100%; max-width:640px;
+    padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height:88vh; overflow-y:auto;
+  }
+  .modal h3{ margin:0 0 14px; font-size:16px; color:var(--dark); }
+  .modal-close{
+    float:right; background:none; border:none; font-size:20px; color:var(--text-soft); cursor:pointer;
+  }
+
+  .toast{
+    position:fixed; bottom:96px; left:50%; transform:translateX(-50%);
+    background:var(--dark); color:#fff; padding:11px 18px; border-radius:30px;
+    font-size:13.5px; z-index:80; box-shadow:0 4px 14px rgba(0,0,0,0.2);
+  }
+
+  .conn{
+    font-size:11.5px; padding:6px 10px; border-radius:8px; margin-bottom:12px;
+    display:flex; align-items:center; gap:6px; font-weight:600;
+  }
+  .conn.ok{ background:#D9F0E1; color:var(--ok); }
+  .conn.err{ background:#FBE1DF; color:var(--danger); }
+
+  .print-only{ display:none; }
+
+  @media print{
+    body *{ visibility:hidden; }
+    #printArea, #printArea *{ visibility:visible; }
+    #printArea{ position:absolute; top:0; left:0; width:100%; padding:0; margin:0; }
+    .print-only{ display:block; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-icon">🌡️</div>
+    <div>
+      <h1>Control de Temperaturas</h1>
+      <p class="sub" id="subtitle">Congeladores y heladeras</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="connStatus" class="conn ok" style="display:none;"></div>
+
+  <!-- TAB: REGISTRAR -->
+  <section id="tab-registrar" class="tabpanel active">
+    <div class="card">
+      <h2>Nuevo registro</h2>
+      <label for="selEquipo">Equipo</label>
+      <select id="selEquipo"></select>
+
+      <label for="inpResponsable">Responsable</label>
+      <input type="text" id="inpResponsable" placeholder="Nombre de quien registra">
+
+      <div class="row2">
+        <div>
+          <label for="inpFecha">Fecha</label>
+          <input type="date" id="inpFecha">
+        </div>
+        <div>
+          <label for="inpHoraInicio">Hora inicial</label>
+          <input type="time" id="inpHoraInicio">
+        </div>
+      </div>
+
+      <label for="inpTempInicio">Temperatura inicial (°C)</label>
+      <input type="number" id="inpTempInicio" step="0.1" placeholder="Ej: -18.5">
+
+      <button class="btn btn-primary" onclick="guardarNuevoRegistro()">Guardar registro</button>
+    </div>
+
+    <div class="card" id="cardAbiertos">
+      <h2>Pendientes de cierre</h2>
+      <div id="listaAbiertos"><div class="empty">No hay registros abiertos</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Registros de hoy</h2>
+      <div id="listaHoy"><div class="empty">Sin registros hoy todavía</div></div>
+    </div>
+  </section>
+
+  <!-- TAB: EQUIPOS -->
+  <section id="tab-equipos" class="tabpanel">
+    <div class="card">
+      <h2>Agregar equipo</h2>
+      <label for="inpNuevoEquipo">Nombre o número</label>
+      <input type="text" id="inpNuevoEquipo" placeholder="Ej: Congelador 1">
+      <button class="btn btn-primary" onclick="agregarEquipo()">Agregar equipo</button>
+    </div>
+    <div class="card">
+      <h2>Equipos registrados</h2>
+      <div id="listaEquipos"><div class="empty">Todavía no agregaste equipos</div></div>
+    </div>
+  </section>
+
+  <!-- TAB: HISTORIAL -->
+  <section id="tab-historial" class="tabpanel">
+    <div class="card">
+      <h2>Planilla mensual</h2>
+      <label for="selEquipoHist">Equipo</label>
+      <select id="selEquipoHist"></select>
+      <div class="row2">
+        <div>
+          <label for="selMes">Mes</label>
+          <select id="selMes"></select>
+        </div>
+        <div>
+          <label for="selAnio">Año</label>
+          <select id="selAnio"></select>
+        </div>
+      </div>
+      <button class="btn btn-outline" onclick="cargarHistorial()">Ver registros</button>
+      <button class="btn btn-primary" onclick="imprimirPlanilla()">Imprimir planilla</button>
+    </div>
+
+    <div class="card">
+      <h2 id="histTitulo">Registros del mes</h2>
+      <div id="listaHistorial"><div class="empty">Elegí equipo y mes, luego "Ver registros"</div></div>
+    </div>
+  </section>
+</main>
+
+<div class="tabbar">
+  <button class="active" data-tab="registrar" onclick="cambiarTab('registrar')">
+    <span class="ic">📝</span>Registrar
+  </button>
+  <button data-tab="equipos" onclick="cambiarTab('equipos')">
+    <span class="ic">❄️</span>Equipos
+  </button>
+  <button data-tab="historial" onclick="cambiarTab('historial')">
+    <span class="ic">🖨️</span>Historial
+  </button>
+</div>
+
+<!-- MODAL: cerrar registro -->
+<div class="modal-bg" id="modalCierre" style="display:none;">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal('modalCierre')">✕</button>
+    <h3>Cerrar registro</h3>
+    <p class="reg-detail" id="cierreEquipoInfo"></p>
+    <label for="inpHoraCierre">Hora de cierre</label>
+    <input type="time" id="inpHoraCierre">
+    <label for="inpTempCierre">Temperatura de cierre (°C)</label>
+    <input type="number" id="inpTempCierre" step="0.1" placeholder="Ej: -19.0">
+    <label for="inpResponsableCierre">Responsable</label>
+    <input type="text" id="inpResponsableCierre">
+    <button class="btn btn-primary" onclick="confirmarCierre()">Confirmar cierre</button>
+  </div>
+</div>
+
+<!-- MODAL: editar registro -->
+<div class="modal-bg" id="modalEditar" style="display:none;">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal('modalEditar')">✕</button>
+    <h3>Editar registro</h3>
+    <div class="row2">
+      <div>
+        <label>Fecha</label>
+        <input type="date" id="editFecha">
+      </div>
+      <div>
+        <label>Hora inicial</label>
+        <input type="time" id="editHoraInicio">
+      </div>
+    </div>
+    <label>Temp. inicial (°C)</label>
+    <input type="number" id="editTempInicio" step="0.1">
+    <div class="row2">
+      <div>
+        <label>Hora cierre</label>
+        <input type="time" id="editHoraCierre">
+      </div>
+      <div>
+        <label>Temp. cierre (°C)</label>
+        <input type="number" id="editTempCierre" step="0.1">
+      </div>
+    </div>
+    <label>Responsable</label>
+    <input type="text" id="editResponsable">
+    <button class="btn btn-primary" onclick="guardarEdicion()">Guardar cambios</button>
+    <button class="btn btn-danger" onclick="eliminarRegistroActual()">Eliminar registro</button>
+  </div>
+</div>
+
+<!-- MODAL: editar equipo -->
+<div class="modal-bg" id="modalEquipo" style="display:none;">
+  <div class="modal">
+    <button class="modal-close" onclick="cerrarModal('modalEquipo')">✕</button>
+    <h3>Editar equipo</h3>
+    <label>Nombre o número</label>
+    <input type="text" id="editEquipoNombre">
+    <button class="btn btn-primary" onclick="guardarEquipoEditado()">Guardar cambios</button>
+    <button class="btn btn-danger" onclick="eliminarEquipoActual()">Eliminar equipo</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none;"></div>
+
+<!-- ÁREA DE IMPRESIÓN -->
+<div id="printArea" class="print-only">
+  <div style="padding:24px;font-family:Arial,sans-serif;color:#111;">
+    <h2 id="pEquipoNombre" style="margin:0 0 4px;">Equipo</h2>
+    <p id="pPeriodo" style="margin:0 0 18px;color:#444;">Periodo</p>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:#eee;">
+          <th style="border:1px solid #999;padding:6px;">Fecha</th>
+          <th style="border:1px solid #999;padding:6px;">Hora inicial</th>
+          <th style="border:1px solid #999;padding:6px;">Temp. inicial</th>
+          <th style="border:1px solid #999;padding:6px;">Hora cierre</th>
+          <th style="border:1px solid #999;padding:6px;">Temp. cierre</th>
+          <th style="border:1px solid #999;padding:6px;">Responsable</th>
+        </tr>
+      </thead>
+      <tbody id="pTbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+/* ==================== CONFIGURACIÓN FIREBASE ====================
+   Reemplazá estos valores con los de tu proyecto de Firebase
+   (Firebase Console > Configuración del proyecto > Tus apps > SDK setup)
+=================================================================== */
+const firebaseConfig = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
+};
+
+let db = null;
+let firebaseOk = false;
+try{
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  firebaseOk = true;
+}catch(e){
+  console.error("Error iniciando Firebase:", e);
+}
+
+/* ==================== ESTADO ==================== */
+let equipos = [];        // {id, nombre}
+let registrosHoy = [];
+let registrosAbiertos = [];
+let equipoActualId = null; // para modales de equipo
+let registroActualId = null; // para modales de registro
+
+const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+/* ==================== UTILIDADES ==================== */
+function hoyISO(){
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function horaActual(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+function fechaLegible(iso){
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=>{ t.style.display="none"; }, 2400);
+}
+function cerrarModal(id){
+  document.getElementById(id).style.display = "none";
+}
+function abrirModal(id){
+  document.getElementById(id).style.display = "flex";
+}
+function setConn(ok, msg){
+  const el = document.getElementById("connStatus");
+  el.style.display = "flex";
+  el.className = "conn " + (ok ? "ok" : "err");
+  el.textContent = msg;
+}
+
+/* ==================== TABS ==================== */
+function cambiarTab(tab){
+  document.querySelectorAll(".tabpanel").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".tabbar button").forEach(b=>b.classList.remove("active"));
+  document.getElementById("tab-"+tab).classList.add("active");
+  document.querySelector(`.tabbar button[data-tab="${tab}"]`).classList.add("active");
+}
+
+/* ==================== INIT ==================== */
+function initFechaHora(){
+  document.getElementById("inpFecha").value = hoyISO();
+  document.getElementById("inpHoraInicio").value = horaActual();
+}
+function initResponsableGuardado(){
+  const r = localStorage.getItem("ct_responsable") || "";
+  document.getElementById("inpResponsable").value = r;
+}
+function initSelectoresHistorial(){
+  const selMes = document.getElementById("selMes");
+  MESES.forEach((m,i)=>{
+    const opt = document.createElement("option");
+    opt.value = i+1; opt.textContent = m;
+    selMes.appendChild(opt);
+  });
+  selMes.value = new Date().getMonth()+1;
+
+  const selAnio = document.getElementById("selAnio");
+  const anioActual = new Date().getFullYear();
+  for(let y=anioActual; y>=anioActual-3; y--){
+    const opt = document.createElement("option");
+    opt.value = y; opt.textContent = y;
+    selAnio.appendChild(opt);
+  }
+}
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  initFechaHora();
+  initResponsableGuardado();
+  initSelectoresHistorial();
+  if(firebaseOk){
+    escucharEquipos();
+  }else{
+    setConn(false, "No se pudo conectar con Firebase. Revisá la configuración.");
+  }
+});
+
+/* ==================== EQUIPOS ==================== */
+function escucharEquipos(){
+  db.collection("equipos").orderBy("nombre").onSnapshot(snap=>{
+    equipos = [];
+    snap.forEach(doc=> equipos.push({id:doc.id, ...doc.data()}));
+    renderEquipos();
+    renderSelectsEquipo();
+    escucharRegistrosHoy();
+    setConn(true, "Conectado");
+    setTimeout(()=>{ document.getElementById("connStatus").style.display="none"; }, 1800);
+  }, err=>{
+    console.error(err);
+    setConn(false, "Error de conexión con Firebase");
+  });
+}
+
+function renderSelectsEquipo(){
+  const selReg = document.getElementById("selEquipo");
+  const selHist = document.getElementById("selEquipoHist");
+  const prevReg = selReg.value;
+  const prevHist = selHist.value;
+  selReg.innerHTML = "";
+  selHist.innerHTML = "";
+  if(equipos.length === 0){
+    selReg.innerHTML = `<option value="">Agregá un equipo primero</option>`;
+    selHist.innerHTML = `<option value="">Agregá un equipo primero</option>`;
+    return;
+  }
+  equipos.forEach(eq=>{
+    const o1 = document.createElement("option");
+    o1.value = eq.id; o1.textContent = eq.nombre;
+    selReg.appendChild(o1);
+    const o2 = document.createElement("option");
+    o2.value = eq.id; o2.textContent = eq.nombre;
+    selHist.appendChild(o2);
+  });
+  if(prevReg) selReg.value = prevReg;
+  if(prevHist) selHist.value = prevHist;
+}
+
+function renderEquipos(){
+  const cont = document.getElementById("listaEquipos");
+  if(equipos.length === 0){
+    cont.innerHTML = `<div class="empty">Todavía no agregaste equipos</div>`;
+    return;
+  }
+  cont.innerHTML = equipos.map(eq=>`
+    <div class="equipo-row">
+      <div class="name">${escapeHtml(eq.nombre)}</div>
+      <div class="actions">
+        <button class="icon-btn" onclick="abrirEditarEquipo('${eq.id}')">✏️</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function agregarEquipo(){
+  const inp = document.getElementById("inpNuevoEquipo");
+  const nombre = inp.value.trim();
+  if(!nombre){ showToast("Escribí un nombre o número"); return; }
+  if(!firebaseOk){ showToast("Sin conexión a Firebase"); return; }
+  db.collection("equipos").add({nombre, creado: firebase.firestore.FieldValue.serverTimestamp()})
+    .then(()=>{ inp.value=""; showToast("Equipo agregado"); })
+    .catch(e=>{ console.error(e); showToast("Error al guardar"); });
+}
+
+function abrirEditarEquipo(id){
+  const eq = equipos.find(e=>e.id===id);
+  if(!eq) return;
+  equipoActualId = id;
+  document.getElementById("editEquipoNombre").value = eq.nombre;
+  abrirModal("modalEquipo");
+}
+function guardarEquipoEditado(){
+  const nombre = document.getElementById("editEquipoNombre").value.trim();
+  if(!nombre){ showToast("El nombre no puede estar vacío"); return; }
+  db.collection("equipos").doc(equipoActualId).update({nombre})
+    .then(()=>{ cerrarModal("modalEquipo"); showToast("Equipo actualizado"); })
+    .catch(e=>{ console.error(e); showToast("Error al actualizar"); });
+}
+function eliminarEquipoActual(){
+  if(!confirm("¿Eliminar este equipo? Los registros ya guardados no se borran, pero dejarán de estar asociados a un equipo activo.")) return;
+  db.collection("equipos").doc(equipoActualId).delete()
+    .then(()=>{ cerrarModal("modalEquipo"); showToast("Equipo eliminado"); })
+    .catch(e=>{ console.error(e); showToast("Error al eliminar"); });
+}
+
+/* ==================== REGISTROS: NUEVO ==================== */
+function guardarNuevoRegistro(){
+  if(!firebaseOk){ showToast("Sin conexión a Firebase"); return; }
+  const equipoId = document.getElementById("selEquipo").value;
+  if(!equipoId){ showToast("Elegí un equipo"); return; }
+  const equipo = equipos.find(e=>e.id===equipoId);
+  const responsable = document.getElementById("inpResponsable").value.trim();
+  const fecha = document.getElementById("inpFecha").value;
+  const horaInicio = document.getElementById("inpHoraInicio").value;
+  const tempInicio = document.getElementById("inpTempInicio").value;
+
+  if(!responsable){ showToast("Ingresá el responsable"); return; }
+  if(!fecha || !horaInicio){ showToast("Falta fecha u hora"); return; }
+  if(tempInicio === ""){ showToast("Ingresá la temperatura inicial"); return; }
+
+  localStorage.setItem("ct_responsable", responsable);
+
+  db.collection("registros").add({
+    equipoId, equipoNombre: equipo ? equipo.nombre : "",
+    fecha, horaInicio, tempInicio: parseFloat(tempInicio),
+    horaCierre: null, tempCierre: null,
+    responsableInicio: responsable, responsableCierre: null,
+    estado: "abierto",
+    creado: firebase.firestore.FieldValue.serverTimestamp()
+  }).then(()=>{
+    showToast("Registro guardado");
+    document.getElementById("inpTempInicio").value = "";
+    initFechaHora();
+  }).catch(e=>{ console.error(e); showToast("Error al guardar"); });
+}
+
+/* ==================== REGISTROS: HOY / ABIERTOS ==================== */
+let unsubHoy = null;
+function escucharRegistrosHoy(){
+  if(unsubHoy) unsubHoy();
+  const hoy = hoyISO();
+  unsubHoy = db.collection("registros").where("fecha","==",hoy)
+    .onSnapshot(snap=>{
+      registrosHoy = [];
+      snap.forEach(doc=> registrosHoy.push({id:doc.id, ...doc.data()}));
+      registrosHoy.sort((a,b)=> (a.horaInicio||"").localeCompare(b.horaInicio||""));
+      registrosAbiertos = registrosHoy.filter(r=>r.estado==="abierto");
+      renderAbiertos();
+      renderHoy();
+    }, err=>{ console.error(err); });
+}
+
+function renderAbiertos(){
+  const cont = document.getElementById("listaAbiertos");
+  if(registrosAbiertos.length===0){
+    cont.innerHTML = `<div class="empty">No hay registros abiertos</div>`;
+    return;
+  }
+  cont.innerHTML = registrosAbiertos.map(r=>`
+    <div class="reg-item abierto">
+      <div class="top-row">
+        <span class="eq-name">${escapeHtml(r.equipoNombre)}</span>
+        <span class="badge abierto">Abierto</span>
+      </div>
+      <div class="reg-detail">
+        Inicio: ${r.horaInicio} · ${r.tempInicio}°C · ${escapeHtml(r.responsableInicio)}
+      </div>
+      <div class="reg-actions">
+        <button class="btn btn-outline btn-sm" onclick="abrirCierre('${r.id}')">Cerrar registro</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderHoy(){
+  const cont = document.getElementById("listaHoy");
+  if(registrosHoy.length===0){
+    cont.innerHTML = `<div class="empty">Sin registros hoy todavía</div>`;
+    return;
+  }
+  cont.innerHTML = registrosHoy.map(r=>`
+    <div class="reg-item">
+      <div class="top-row">
+        <span class="eq-name">${escapeHtml(r.equipoNombre)}</span>
+        <span class="badge ${r.estado}">${r.estado==="abierto"?"Abierto":"Cerrado"}</span>
+      </div>
+      <div class="reg-detail">
+        Inicio: ${r.horaInicio} · ${r.tempInicio}°C · ${escapeHtml(r.responsableInicio)}<br>
+        ${r.estado==="cerrado" ? `Cierre: ${r.horaCierre} · ${r.tempCierre}°C · ${escapeHtml(r.responsableCierre||"")}` : "Cierre pendiente"}
+      </div>
+      <div class="reg-actions">
+        <button class="btn btn-outline btn-sm" onclick="abrirEditarRegistro('${r.id}')">Editar</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+/* ==================== CIERRE DE REGISTRO ==================== */
+function abrirCierre(id){
+  const r = registrosHoy.find(x=>x.id===id) || registrosAbiertos.find(x=>x.id===id);
+  if(!r) return;
+  registroActualId = id;
+  document.getElementById("cierreEquipoInfo").textContent =
+    `${r.equipoNombre} · Inicio ${r.horaInicio} (${r.tempInicio}°C)`;
+  document.getElementById("inpHoraCierre").value = horaActual();
+  document.getElementById("inpTempCierre").value = "";
+  document.getElementById("inpResponsableCierre").value = r.responsableInicio || localStorage.getItem("ct_responsable") || "";
+  abrirModal("modalCierre");
+}
+function confirmarCierre(){
+  const horaCierre = document.getElementById("inpHoraCierre").value;
+  const tempCierre = document.getElementById("inpTempCierre").value;
+  const responsableCierre = document.getElementById("inpResponsableCierre").value.trim();
+  if(!horaCierre){ showToast("Falta la hora de cierre"); return; }
+  if(tempCierre===""){ showToast("Ingresá la temperatura de cierre"); return; }
+  if(!responsableCierre){ showToast("Ingresá el responsable"); return; }
+
+  db.collection("registros").doc(registroActualId).update({
+    horaCierre, tempCierre: parseFloat(tempCierre), responsableCierre, estado:"cerrado"
+  }).then(()=>{
+    cerrarModal("modalCierre");
+    showToast("Registro cerrado");
+  }).catch(e=>{ console.error(e); showToast("Error al cerrar registro"); });
+}
+
+/* ==================== EDITAR / ELIMINAR REGISTRO ==================== */
+function abrirEditarRegistro(id){
+  const r = registrosHoy.find(x=>x.id===id) || historialActual.find(x=>x.id===id);
+  if(!r) return;
+  registroActualId = id;
+  document.getElementById("editFecha").value = r.fecha;
+  document.getElementById("editHoraInicio").value = r.horaInicio || "";
+  document.getElementById("editTempInicio").value = r.tempInicio ?? "";
+  document.getElementById("editHoraCierre").value = r.horaCierre || "";
+  document.getElementById("editTempCierre").value = r.tempCierre ?? "";
+  document.getElementById("editResponsable").value = r.responsableInicio || "";
+  abrirModal("modalEditar");
+}
+function guardarEdicion(){
+  const fecha = document.getElementById("editFecha").value;
+  const horaInicio = document.getElementById("editHoraInicio").value;
+  const tempInicio = document.getElementById("editTempInicio").value;
+  const horaCierre = document.getElementById("editHoraCierre").value;
+  const tempCierre = document.getElementById("editTempCierre").value;
+  const responsable = document.getElementById("editResponsable").value.trim();
+
+  const data = {
+    fecha, horaInicio,
+    tempInicio: tempInicio==="" ? null : parseFloat(tempInicio),
+    horaCierre: horaCierre || null,
+    tempCierre: tempCierre==="" ? null : parseFloat(tempCierre),
+    responsableInicio: responsable,
+    estado: horaCierre && tempCierre!=="" ? "cerrado" : "abierto"
+  };
+  db.collection("registros").doc(registroActualId).update(data)
+    .then(()=>{ cerrarModal("modalEditar"); showToast("Registro actualizado"); if(historialActual.length) cargarHistorial(); })
+    .catch(e=>{ console.error(e); showToast("Error al actualizar"); });
+}
+function eliminarRegistroActual(){
+  if(!confirm("¿Eliminar este registro? Esta acción no se puede deshacer.")) return;
+  db.collection("registros").doc(registroActualId).delete()
+    .then(()=>{ cerrarModal("modalEditar"); showToast("Registro eliminado"); if(historialActual.length) cargarHistorial(); })
+    .catch(e=>{ console.error(e); showToast("Error al eliminar"); });
+}
+
+/* ==================== HISTORIAL / IMPRESIÓN ==================== */
+let historialActual = [];
+function cargarHistorial(){
+  const equipoId = document.getElementById("selEquipoHist").value;
+  const mes = parseInt(document.getElementById("selMes").value);
+  const anio = parseInt(document.getElementById("selAnio").value);
+  if(!equipoId){ showToast("Elegí un equipo"); return; }
+
+  const desde = `${anio}-${String(mes).padStart(2,"0")}-01`;
+  const ultimoDia = new Date(anio, mes, 0).getDate();
+  const hasta = `${anio}-${String(mes).padStart(2,"0")}-${String(ultimoDia).padStart(2,"0")}`;
+
+  db.collection("registros")
+    .where("equipoId","==",equipoId)
+    .where("fecha",">=",desde)
+    .where("fecha","<=",hasta)
+    .get().then(snap=>{
+      historialActual = [];
+      snap.forEach(doc=> historialActual.push({id:doc.id, ...doc.data()}));
+      historialActual.sort((a,b)=> a.fecha.localeCompare(b.fecha) || (a.horaInicio||"").localeCompare(b.horaInicio||""));
+      renderHistorial();
+    }).catch(e=>{ console.error(e); showToast("Error al cargar historial"); });
+}
+function renderHistorial(){
+  const equipo = equipos.find(e=>e.id===document.getElementById("selEquipoHist").value);
+  const mes = MESES[parseInt(document.getElementById("selMes").value)-1];
+  const anio = document.getElementById("selAnio").value;
+  document.getElementById("histTitulo").textContent =
+    equipo ? `${equipo.nombre} · ${mes} ${anio}` : "Registros del mes";
+
+  const cont = document.getElementById("listaHistorial");
+  if(historialActual.length===0){
+    cont.innerHTML = `<div class="empty">No hay registros para ese equipo y mes</div>`;
+    return;
+  }
+  cont.innerHTML = historialActual.map(r=>`
+    <div class="reg-item">
+      <div class="top-row">
+        <span class="eq-name">${fechaLegible(r.fecha)}</span>
+        <span class="badge ${r.estado}">${r.estado==="abierto"?"Abierto":"Cerrado"}</span>
+      </div>
+      <div class="reg-detail">
+        Inicio: ${r.horaInicio||"-"} · ${r.tempInicio??"-"}°C<br>
+        Cierre: ${r.horaCierre||"-"} · ${r.tempCierre??"-"}°C<br>
+        Responsable: ${escapeHtml(r.responsableInicio||"")}${r.responsableCierre && r.responsableCierre!==r.responsableInicio ? " / "+escapeHtml(r.responsableCierre) : ""}
+      </div>
+      <div class="reg-actions">
+        <button class="btn btn-outline btn-sm" onclick="abrirEditarRegistro('${r.id}')">Editar</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function imprimirPlanilla(){
+  if(historialActual.length===0){
+    showToast("Primero cargá los registros con \"Ver registros\"");
+    return;
+  }
+  const equipo = equipos.find(e=>e.id===document.getElementById("selEquipoHist").value);
+  const mes = MESES[parseInt(document.getElementById("selMes").value)-1];
+  const anio = document.getElementById("selAnio").value;
+
+  document.getElementById("pEquipoNombre").textContent = equipo ? equipo.nombre : "";
+  document.getElementById("pPeriodo").textContent = `Periodo: ${mes} ${anio}`;
+
+  const tbody = document.getElementById("pTbody");
+  tbody.innerHTML = historialActual.map(r=>`
+    <tr>
+      <td style="border:1px solid #999;padding:6px;">${fechaLegible(r.fecha)}</td>
+      <td style="border:1px solid #999;padding:6px;">${r.horaInicio||""}</td>
+      <td style="border:1px solid #999;padding:6px;">${r.tempInicio??""}</td>
+      <td style="border:1px solid #999;padding:6px;">${r.horaCierre||""}</td>
+      <td style="border:1px solid #999;padding:6px;">${r.tempCierre??""}</td>
+      <td style="border:1px solid #999;padding:6px;">${escapeHtml(r.responsableInicio||"")}</td>
+    </tr>
+  `).join("");
+
+  setTimeout(()=> window.print(), 80);
+}
+
+/* ==================== HELPERS ==================== */
+function escapeHtml(str){
+  if(str==null) return "";
+  return String(str).replace(/[&<>"']/g, c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+/* ==================== SERVICE WORKER (PWA) ==================== */
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("service-worker.js").catch(e=>console.warn("SW error:", e));
+  });
+}
+</script>
+</body>
+</html>
