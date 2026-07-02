@@ -12,6 +12,7 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <style>
   :root{
@@ -248,7 +249,10 @@
       <button class="btn btn-primary" onclick="agregarEquipo()">Agregar equipo</button>
     </div>
     <div class="card">
-      <h2>Equipos registrados</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <h2 style="margin:0;">Equipos registrados</h2>
+        <button class="btn btn-outline btn-sm" onclick="imprimirTodosQR()">🖨️ Imprimir todos los QR</button>
+      </div>
       <div id="listaEquipos"><div class="empty">Todavía no agregaste equipos</div></div>
     </div>
   </section>
@@ -354,6 +358,18 @@
   </div>
 </div>
 
+<!-- MODAL: código QR -->
+<div class="modal-bg" id="modalQR" style="display:none;">
+  <div class="modal" style="text-align:center;">
+    <button class="modal-close" onclick="cerrarModal('modalQR')">✕</button>
+    <h3 id="qrTitulo">Código QR</h3>
+    <p class="reg-detail" style="margin-bottom:14px;">Al escanearlo se abre el historial del mes actual de este equipo.</p>
+    <div id="qrContenedor" style="display:flex;justify-content:center;padding:10px;background:#fff;border-radius:12px;"></div>
+    <button class="btn btn-outline" onclick="descargarQR()">Descargar imagen</button>
+    <button class="btn btn-primary" onclick="imprimirQR()">Imprimir</button>
+  </div>
+</div>
+
 <div id="toast" class="toast" style="display:none;"></div>
 
 <!-- ÁREA DE IMPRESIÓN -->
@@ -383,12 +399,12 @@
    (Firebase Console > Configuración del proyecto > Tus apps > SDK setup)
 =================================================================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyDjXHJYZNjq52S-otwb5A1Rtr5B4x9Rwds",
-  authDomain: "control-temperaturas-ae27d.firebaseapp.com",
-  projectId: "control-temperaturas-ae27d",
-  storageBucket: "control-temperaturas-ae27d.firebasestorage.app",
-  messagingSenderId: "935726042136",
-  appId: "1:935726042136:web:7fd04b409f3db55919076d"
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_PROYECTO.firebaseapp.com",
+  projectId: "TU_PROYECTO",
+  storageBucket: "TU_PROYECTO.appspot.com",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
 };
 
 let db = null;
@@ -482,6 +498,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
   initFechaHora();
   initResponsableGuardado();
   initSelectoresHistorial();
+  leerParametrosURL();
   if(firebaseOk){
     escucharEquipos();
   }else{
@@ -497,6 +514,7 @@ function escucharEquipos(){
     renderEquipos();
     renderSelectsEquipo();
     escucharRegistrosHoy();
+    aplicarParametroSiCorresponde();
     setConn(true, "Conectado");
     setTimeout(()=>{ document.getElementById("connStatus").style.display="none"; }, 1800);
   }, err=>{
@@ -539,6 +557,7 @@ function renderEquipos(){
     <div class="equipo-row">
       <div class="name">${escapeHtml(eq.nombre)}</div>
       <div class="actions">
+        <button class="icon-btn" onclick="mostrarQR('${eq.id}')" title="Ver código QR">▦</button>
         <button class="icon-btn" onclick="abrirEditarEquipo('${eq.id}')">✏️</button>
       </div>
     </div>
@@ -822,6 +841,158 @@ function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, c=>({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
   }[c]));
+}
+
+/* ==================== CÓDIGOS QR POR EQUIPO ==================== */
+let qrEquipoActualId = null;
+let qrEquipoActualNombre = "";
+
+function urlBaseApp(){
+  // URL completa hasta index.html, sin parámetros
+  return window.location.origin + window.location.pathname.replace(/index\.html$/, "");
+}
+
+function mostrarQR(id){
+  const eq = equipos.find(e=>e.id===id);
+  if(!eq) return;
+  qrEquipoActualId = id;
+  qrEquipoActualNombre = eq.nombre;
+  document.getElementById("qrTitulo").textContent = eq.nombre;
+
+  const cont = document.getElementById("qrContenedor");
+  cont.innerHTML = "";
+  const url = `${urlBaseApp()}?equipo=${encodeURIComponent(id)}&vista=historial`;
+  new QRCode(cont, {
+    text: url,
+    width: 200,
+    height: 200,
+    colorDark: "#0F3B41",
+    colorLight: "#ffffff"
+  });
+  abrirModal("modalQR");
+}
+
+function obtenerCanvasQR(){
+  const cont = document.getElementById("qrContenedor");
+  return cont.querySelector("canvas");
+}
+
+function descargarQR(){
+  const canvas = obtenerCanvasQR();
+  if(!canvas){ showToast("No se pudo generar la imagen"); return; }
+  const link = document.createElement("a");
+  link.download = `QR-${qrEquipoActualNombre.replace(/\s+/g,"_")}.png`;
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+}
+
+function imprimirQR(){
+  const canvas = obtenerCanvasQR();
+  if(!canvas){ showToast("No se pudo generar la imagen"); return; }
+  const dataUrl = canvas.toDataURL("image/png");
+  const w = window.open("", "_blank");
+  w.document.write(`
+    <html><head><title>QR - ${qrEquipoActualNombre}</title>
+    <style>
+      body{ font-family:Arial,sans-serif; text-align:center; padding:40px; }
+      h2{ margin-bottom:20px; }
+      img{ width:260px; height:260px; }
+    </style>
+    </head><body>
+      <h2>${qrEquipoActualNombre}</h2>
+      <img src="${dataUrl}">
+      <p>Escaneá para ver el historial de temperaturas de este equipo</p>
+    </body></html>
+  `);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{ w.print(); }, 300);
+}
+
+function imprimirTodosQR(){
+  if(equipos.length===0){ showToast("No hay equipos para generar QR"); return; }
+
+  const tempCont = document.createElement("div");
+  tempCont.style.position = "fixed";
+  tempCont.style.left = "-9999px";
+  tempCont.style.top = "0";
+  document.body.appendChild(tempCont);
+
+  let itemsHtml = "";
+  equipos.forEach(eq=>{
+    const div = document.createElement("div");
+    tempCont.appendChild(div);
+    const url = `${urlBaseApp()}?equipo=${encodeURIComponent(eq.id)}&vista=historial`;
+    new QRCode(div, {
+      text: url, width: 180, height: 180,
+      colorDark: "#0F3B41", colorLight: "#ffffff"
+    });
+    const canvas = div.querySelector("canvas");
+    const dataUrl = canvas ? canvas.toDataURL("image/png") : "";
+    itemsHtml += `
+      <div class="qr-item">
+        <img src="${dataUrl}">
+        <p>${escapeHtml(eq.nombre)}</p>
+      </div>`;
+  });
+
+  document.body.removeChild(tempCont);
+
+  const w = window.open("", "_blank");
+  w.document.write(`
+    <html><head><title>Códigos QR - Equipos</title>
+    <style>
+      body{ font-family:Arial,sans-serif; padding:28px; color:#111; }
+      h1{ font-size:19px; margin:0 0 6px; }
+      p.sub{ margin:0 0 22px; color:#555; font-size:13px; }
+      .qr-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+      .qr-item{
+        text-align:center; border:1.5px solid #ccc; border-radius:12px;
+        padding:14px 10px; page-break-inside:avoid;
+      }
+      .qr-item img{ width:100%; max-width:170px; height:auto; }
+      .qr-item p{ margin:10px 0 0; font-weight:bold; font-size:14px; }
+      @media print{
+        .qr-grid{ grid-template-columns:repeat(3,1fr); }
+      }
+    </style>
+    </head><body>
+      <h1>Control de Temperaturas</h1>
+      <p class="sub">Códigos QR por equipo · recortar y pegar en cada equipo</p>
+      <div class="qr-grid">${itemsHtml}</div>
+    </body></html>
+  `);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>{ w.print(); }, 400);
+}
+
+/* ==================== ABRIR DESDE QR (parámetros de URL) ==================== */
+let paramEquipoPendiente = null;
+let paramVistaPendiente = null;
+let yaAplicoParam = false;
+
+function leerParametrosURL(){
+  const params = new URLSearchParams(window.location.search);
+  paramEquipoPendiente = params.get("equipo");
+  paramVistaPendiente = params.get("vista");
+}
+
+function aplicarParametroSiCorresponde(){
+  if(yaAplicoParam) return;
+  if(!paramEquipoPendiente) return;
+  const existe = equipos.find(e=>e.id===paramEquipoPendiente);
+  if(!existe) return; // todavía no llegaron los equipos, se reintenta en el próximo snapshot
+
+  yaAplicoParam = true;
+  if(paramVistaPendiente === "historial"){
+    document.getElementById("selEquipoHist").value = paramEquipoPendiente;
+    cambiarTab("historial");
+    cargarHistorial();
+  }else{
+    document.getElementById("selEquipo").value = paramEquipoPendiente;
+    cambiarTab("registrar");
+  }
 }
 
 /* ==================== SERVICE WORKER (PWA) ==================== */
